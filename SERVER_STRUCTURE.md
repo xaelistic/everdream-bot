@@ -11,11 +11,11 @@
 
 ## Channel Layout
 
-### 📋 INFORMATION (read-only for members)
+### 📋 INFORMATION
 ```
-#welcome          — Welcome message + bot introductions
-#rules            — Server rules (react to verify)
-#announcements    — Official Everdream updates
+#welcome          — Welcome message + verify button
+#rules            — Server rules (read-only)
+#announcements    — Official Everdream updates (read-only)
 #roles            — Self-assignable reaction roles
 ```
 
@@ -29,7 +29,7 @@
 
 ### 🌙 DREAM JOURNAL
 ```
-#dream-journal    — Share your dreams
+#dream-journal    — Share your dreams (use !dream)
 #lucid-talk       — Lucid dreaming discussion
 #dream-interpret  — Ask for dream interpretations
 #sleep-talk       — Sleep quality, routines, tips
@@ -37,9 +37,16 @@
 
 ### 🎨 CREATIVE
 ```
-#dream-art       — Art inspired by dreams
+#dream-art        — Art inspired by dreams
 #dream-music      — Music for sleep/dreaming
 #writing          — Dream-inspired writing
+```
+
+### 💰 MARKETPLACE
+```
+#trading          — List and trade NFTs (!list, !buy, !cancel)
+#showcase         — Show off your collection
+#leaderboard      — Top creators, collectors, traders (read-only)
 ```
 
 ### 🔒 MEMBERS ONLY (requires Member role)
@@ -52,7 +59,7 @@
 ### 🤖 BOT
 ```
 #bot-commands     — Bot command usage
-#bot-log          — Bot action logs (admin only)
+#bot-log          — Bot action logs (admin only, read-only)
 ```
 
 ### 🔧 ADMIN (admin only)
@@ -71,21 +78,23 @@
 🟠 Admin          — Manage server, roles, channels
 🟡 Moderator      — Kick, ban, mute, manage messages
 🟢 Helper         — Answer questions, guide new members
+🟣 Creator        — Content creators (auto-assigned)
+🔵 Collector      — NFT holders (auto-assigned via token-gate)
 🔵 Member         — Verified members (access to main channels)
 ⚪ Unverified     — New members (limited access until verified)
 ⚫ Muted          — Cannot send messages
 ```
 
-### Self-Assignable Roles (via reaction roles)
+### Self-Assignable Roles (via reaction roles in #roles)
 ```
-🌙 Dream Journaler    — Get pinged for dream journal reminders
-📢 Announcements      — Get pinged for server announcements
-🎨 Artist             — Access to creative channels
+🌙 Dream Journaler    — Dream journal reminders
+📢 Announcements      — Server announcements
+🎨 Artist             — Creative content
 🎮 Gamer              — Gaming night notifications
 📚 Bookworm           — Book/sleep story discussions
-🧘 Mindfulness        — Meditation & wellness content
+🧘 Mindfulness        — Meditation & wellness
 🔬 Sleep Science      — Research & science discussions
-💎 Premium            — Premium tier (if applicable)
+💎 Premium            — Premium tier
 ```
 
 ---
@@ -93,72 +102,88 @@
 ## Onboarding Flow
 
 ### Step 1: User joins → gets `Unverified` role
-- Can only see: #welcome, #rules, #bot-commands
-- Receives a DM from the bot with rules summary + verify button
+- Can only see: #welcome, #rules
+- Receives a DM from the bot with a **Verify button**
 
-### Step 2: User reads #rules
-- Rules include:
-  1. Be respectful and kind
-  2. No spam or self-promotion without permission
-  3. Keep content SFW (or mark NSFW appropriately)
-  4. No harassment, hate speech, or discrimination
-  5. Use the correct channels
-  6. Follow Discord ToS
-  7. Have fun and share your dreams!
-
-### Step 3: User clicks ✅ verify button (in DM or in #rules)
+### Step 2: User clicks ✅ Verify button (in DM)
 - Gets `Member` role
 - Loses `Unverified` role
 - Gets access to all member channels
-- Receives welcome message with next steps
+- An **onboarding modal** pops up asking:
+  1. "How did you find Everdream?" (text input)
+  2. "What brings you here?" (paragraph input)
+  3. "Do you keep a dream journal?" (text input)
+- Responses are logged to #bot-log
 
-### Step 4: User picks roles in #roles
-- Reacts to get notification roles
+### Step 3: User picks roles in #roles
+- Reacts to get notification/interest roles
 - Can be done anytime
 
----
-
-## Bot Commands (prefix: `!`)
-
-| Command | Description | Access |
-|---------|-------------|--------|
-| `!verify` | Manually verify a user | Mod+ |
-| `!kick @user [reason]` | Kick a user | Mod+ |
-| `!ban @user [reason]` | Ban a user | Mod+ |
-| `!mute @user [duration]` | Mute a user | Mod+ |
-| `!warn @user [reason]` | Warn a user | Mod+ |
-| `!clear [amount]` | Clear messages | Mod+ |
-| `!dream [text]` | Log a dream entry | Member+ |
-| `!profile` | View your dream profile | Member+ |
-| `!help` | Show help | Everyone |
+### Alternative: `!verify` command
+- Users who can't receive DMs can type `!verify` in #bot-commands
+- Same effect but without the onboarding questions
 
 ---
 
-## Verification Questions (Premium Touch)
+## Bot Commands
 
-When a user clicks verify, the bot can ask optional questions via DM:
+### Everyone
+| Command | Description |
+|---------|-------------|
+| `!verify` | Verify and get Member role |
+| `!help` | Show all commands |
+| `!profile` | View your dream profile |
+| `!leaderboard` | View top members |
+| `!dream <text>` | Log a dream entry (Member+) |
 
-1. **"How did you find Everdream?"**
-   - Friend invite
-   - Social media
-   - App store
-   - Search
-   - Other: ___
+### Wallet & Web3
+| Command | Description |
+|---------|-------------|
+| `!link <address>` | Link Ethereum wallet |
+| `!upload <id> <title> [desc]` | Register content |
+| `!rate <content_id> <1-5>` | Rate content |
+| `!list <content_id> <price_eth>` | List for sale |
+| `!buy <listing_id>` | Buy a listing |
+| `!confirm <listing_id> <tx_hash>` | Confirm trade (seller) |
+| `!cancel <listing_id>` | Cancel your listing |
+| `!listings` | View active listings |
+| `!remix <new_id> <original_id>` | Register a remix |
+| `!provenance <content_id>` | View provenance chain |
 
-2. **"What brings you here?"** (multi-select reactions)
-   - 🌙 Dream journaling
-   - 🧘 Sleep improvement
-   - 🔮 Lucid dreaming
-   - 🎨 Creative inspiration
-   - 👥 Community
+### Moderation (Mod+)
+| Command | Description |
+|---------|-------------|
+| `!warn @user [reason]` | Warn a user (DMs them) |
+| `!mute @user [seconds] [reason]` | Mute/timeout a user |
+| `!kick @user [reason]` | Kick a user |
+| `!ban @user [reason]` | Ban a user |
+| `!clear [amount]` | Delete messages (1-100) |
 
-3. **"Do you keep a dream journal?"**
-   - ✅ Yes, regularly
-   - 🔄 Sometimes
-   - ❌ Not yet, but want to
-   - 🤔 What's a dream journal?
+### Admin Only
+| Command | Description |
+|---------|-------------|
+| `!setup-server` | Create entire server structure |
+| `!gate-add <role_id> <contract> [chain] [min] [desc]` | Add token gate |
+| `!gate-remove <role_id>` | Remove token gate |
+| `!check-gates` | List active token gates |
 
-These answers are logged (not stored long-term) to help understand the community.
+---
+
+## Gamification
+
+Points are awarded for:
+- 📤 Upload content: **10 pts**
+- ⭐ Give rating: **2 pts**
+- ⭐ Receive rating: **5 pts**
+- 💰 Complete trade: **20 pts**
+- 🎨 Create remix: **15 pts**
+- 🎨 Receive remix: **10 pts**
+- ✅ Verify: **5 pts**
+- 📝 Introduction/dream: **3 pts**
+
+Levels: 1(0) → 2(20) → 3(50) → 4(100) → 5(250) → 6(500) → 7(1000) → 8(2500) → 9(5000) → 10(10000)
+
+Titles: Dream Initiate → Dream Novice → Dreamer → Dream Explorer → Dream Collector → Dream Artist → Sleep Sage → Dream Weaver → Lucid Master → Dream Legend
 
 ---
 
@@ -175,11 +200,11 @@ These answers are logged (not stored long-term) to help understand the community
 
 4. **Zero Tolerance for Hate** — No harassment, hate speech, discrimination, or bullying of any kind.
 
-5. **Use the Right Channels** — Check channel descriptions before posting. Dreams go in #dream-journal, art in #dream-art, etc.
+5. **Use the Right Channels** — Check channel descriptions before posting.
 
 6. **Follow Discord ToS** — https://discord.com/terms
 
-7. **Dream Freely** — This is a space for open-minded exploration. Share, question, and wonder together.
+7. **Dream Freely** — This is a space for open-minded exploration.
 
 **Violations may result in warnings, mutes, kicks, or bans at moderator discretion.**
 
