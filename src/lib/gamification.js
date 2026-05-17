@@ -12,6 +12,7 @@ const POINTS = {
   VERIFY: 5,
   INTRODUCTION: 3,
   DAILY_LOGIN: 1,
+  DREAM_LOGGED: 5,
 };
 
 // Level thresholds

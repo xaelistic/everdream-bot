@@ -128,6 +128,39 @@ export function migrate() {
     CREATE INDEX IF NOT EXISTS idx_content_creator ON content(creator_discord_id);
     CREATE INDEX IF NOT EXISTS idx_users_points ON users(points DESC);
     CREATE INDEX IF NOT EXISTS idx_wallets_address ON wallets(eth_address);
+
+    -- Dream Journal entries
+    CREATE TABLE IF NOT EXISTS dream_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      discord_id TEXT NOT NULL,
+      username TEXT,
+      content TEXT NOT NULL,
+      mood TEXT,
+      tags TEXT,
+      entry_date TEXT DEFAULT (date('now')),
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (discord_id) REFERENCES users(discord_id)
+    );
+
+    -- Dream journal indexes
+    CREATE INDEX IF NOT EXISTS idx_dream_entries_discord ON dream_entries(discord_id);
+    CREATE INDEX IF NOT EXISTS idx_dream_entries_date ON dream_entries(entry_date);
+    CREATE INDEX IF NOT EXISTS idx_dream_entries_discord_date ON dream_entries(discord_id, entry_date);
+
+    -- Add dream_count to users if not exists
+    ALTER TABLE users ADD COLUMN dream_count INTEGER DEFAULT 0;
+
+    -- Minted XAELs (on-chain NFTs minted via bot)
+    CREATE TABLE IF NOT EXISTS minted_xaels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      content_id TEXT NOT NULL UNIQUE,
+      token_id TEXT,
+      tx_hash TEXT,
+      minter_discord_id TEXT NOT NULL,
+      metadata_uri TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_minted_xaels_minter ON minted_xaels(minter_discord_id);
   `);
 }
 

@@ -19,7 +19,7 @@ import { createListing, buyListing, cancelListing, confirmTrade, getActiveListin
 import { rateContent, getContentRating } from './lib/rating.js';
 import { registerRemix, getProvenance } from './lib/provenance.js';
 import { isValidAddress, getNFTBalance } from './web3/index.js';
-import { logMessageDelete, logMessageEdit, logModAction } from './logger.js';
+import { recordDreamEntry, calculateStreak, getDailyPrompt, getRandomPrompt, getMoodStats, getWeeklySummary, searchDreams, getDreamStats } from './lib/dreamJournal.js';
 import db from './db/database.js';
 
 const client = new Client({
@@ -558,6 +558,9 @@ async function handleCommand(command, ctx, args = []) {
           return reply('You need to verify first! Use `!verify` to get the Member role.', true);
         }
 
+        // Record the dream entry
+        const result = recordDreamEntry(user.id, user.username, dreamText);
+
         // Log to dream-journal channel
         const journalChannel = config.channels.dreamJournal
           ? await guild.channels.fetch(config.channels.dreamJournal).catch(() => null)
@@ -574,14 +577,136 @@ async function handleCommand(command, ctx, args = []) {
           await journalChannel.send({ embeds: [dreamEmbed] });
         }
 
-        // Award points
-        awardPoints(user.id, user.username, 'INTRODUCTION', 'Shared a dream');
-
         const confirmEmbed = new EmbedBuilder()
           .setColor(0x6366f1)
           .setTitle('🌙 Dream Logged')
-          .setDescription(`Your dream has been recorded in the journal. Sweet dreams! 💤`);
+          .setDescription(
+            `Your dream has been recorded!\n\n` +
+            `**Streak:** ${result.streak.current} day${result.streak.current !== 1 ? 's' : ''} 🔥\n` +
+            `**Points:** +${result.pointsEarned} (${result.totalPoints} total)\n` +
+            (result.leveledUp ? `\n🎉 **Level Up!** You're now **Level ${result.level} — ${result.title}**!` : '')
+          );
         replyEmbed(confirmEmbed, true);
+        break;
+      }
+
+      // ── Dream Streak ─────────────────────────────────────────────
+      case 'streak': {
+        const streak = calculateStreak(user.id);
+        const stats = getDreamStats(user.id);
+
+        const embed = new EmbedBuilder()
+          .setColor(0x6366f1)
+          .setTitle('🔥 Dream Streak')
+          .setDescription(
+            `**Current Streak:** ${streak.current} day${streak.current !== 1 ? 's' : ''}\n` +
+            `**Longest Streak:** ${streak.longest} day${streak.longest !== 1 ? 's' : ''}\n` +
+            `**Total Dreams:** ${stats.totalDreams}\n` +
+            `**This Month:** ${stats.thisMonth}\n` +
+            (stats.moodsTracked.length > 0 ? `**Moods Tracked:** ${stats.moodsTracked.join(', ')}` : '')
+          );
+        replyEmbed(embed);
+        break;
+      }
+
+      // ── Dream Prompt ─────────────────────────────────────────────
+      case 'prompt': {
+        const prompt = args[0] === 'random' ? getRandomPrompt() : getDailyPrompt();
+        const embed = new EmbedBuilder()
+          .setColor(0x8b5cf6)
+          .setTitle('💭 Dream Prompt')
+          .setDescription(`*${prompt.prompt}*`)
+          .setFooter({ text: `Category: ${prompt.category} | Use !prompt random for a random prompt` });
+        replyEmbed(embed, true);
+        break;
+      }
+
+      // ── Dream Search ─────────────────────────────────────────────
+      case 'search-dreams': {
+        const query = args.join(' ');
+        if (!query) return reply('Usage: `!search-dreams <keyword>` — Search your dream journal.', true);
+
+        const results = searchDreams(user.id, query);
+        if (results.length === 0) return reply('No dreams found matching that query.', true);
+
+        const embed = new EmbedBuilder()
+          .setColor(0x6366f1)
+          .setTitle(`🔍 Dream Search: "${query}"`)
+          .setDescription(
+            results.slice(0, 5).map(e =>
+              `**${e.entry_date}:** ${e.content.slice(0, 100)}${e.content.length > 100 ? '...' : ''}`
+            ).join('\n\n')
+          )
+          .setFooter({ text: `${results.length} result${results.length !== 1 ? 's' : ''} found` });
+        replyEmbed(embed, true);
+        break;
+      }
+
+      // ── Dream Stats ──────────────────────────────────────────────
+      case 'dream-stats': {
+        const stats = getDreamStats(user.id);
+        const streak = stats.streak;
+
+        const embed = new EmbedBuilder()
+          .setColor(0x6366f1)
+          .setTitle('📊 Your Dream Stats')
+          .setDescription(
+            `**Total Dreams:** ${stats.totalDreams}\n` +
+            `**This Month:** ${stats.thisMonth}\n` +
+            `**Current Streak:** ${streak.current} day${streak.current !== 1 ? 's' : ''}\n` +
+            `**Longest Streak:** ${streak.longest} day${streak.longest !== 1 ? 's' : ''}\n` +
+            (stats.moodsTracked.length > 0 ? `**Moods:** ${stats.moodsTracked.join(', ')}\n` : '') +
+            `\nKeep dreaming! 🌙`
+          );
+        replyEmbed(embed, true);
+        break;
+      }
+
+      // ── Dream Mood ───────────────────────────────────────────────
+      case 'mood': {
+        const mood = args.join(' ');
+        if (!mood) {
+          const moodStats = getMoodStats(user.id);
+          if (moodStats.length === 0) return reply('No mood data yet. Use `!mood <mood>` to tag your dreams.', true);
+
+          const embed = new EmbedBuilder()
+            .setColor(0x6366f1)
+            .setTitle('🎭 Your Dream Moods (Last 30 Days)')
+            .setDescription(
+              moodStats.map(m => `**${m.mood}:** ${m.count} dream${m.count !== 1 ? 's' : ''}`).join('\n')
+            );
+          return replyEmbed(embed, true);
+        }
+
+        // Tag the most recent dream with a mood
+        const latestDream = db.prepare(
+          'SELECT * FROM dream_entries WHERE discord_id = ? ORDER BY id DESC LIMIT 1'
+        ).get(user.id);
+
+        if (!latestDream) return reply('No dreams logged yet. Use `!dream <text>` first.', true);
+
+        db.prepare('UPDATE dream_entries SET mood = ? WHERE id = ?').run(mood, latestDream.id);
+        return reply(`Mood "${mood}" tagged on your latest dream entry.`, true);
+      }
+
+      // ── Weekly Summary ───────────────────────────────────────────
+      case 'weekly': {
+        const summary = getWeeklySummary(user.id);
+        if (!summary) return reply('No dreams logged this week. Start dreaming! 🌙', true);
+
+        const embed = new EmbedBuilder()
+          .setColor(0x6366f1)
+          .setTitle('📅 Weekly Dream Summary')
+          .setDescription(
+            `**Dreams This Week:** ${summary.totalDreams}\n` +
+            `**Active Days:** ${summary.daysActive}/7\n` +
+            `**Top Mood:** ${summary.topMood}\n` +
+            `**Current Streak:** ${summary.streak.current} day${summary.streak.current !== 1 ? 's' : ''}\n\n` +
+            summary.entries.slice(0, 3).map(e =>
+              `• **${e.entry_date}:** ${e.content.slice(0, 80)}${e.content.length > 80 ? '...' : ''}`
+            ).join('\n')
+          );
+        replyEmbed(embed, true);
         break;
       }
 
@@ -772,6 +897,181 @@ async function handleCommand(command, ctx, args = []) {
         break;
       }
 
+      // ── NFT Minting ─────────────────────────────────────────────
+      case 'mint-xael': {
+        // Check if user has linked a wallet
+        const wallet = db.prepare('SELECT * FROM wallets WHERE discord_id = ?').get(user.id);
+        if (!wallet) return reply('You need to link a wallet first! Use `!link <ethereum_address>`', true);
+
+        const [contentId, title, ...descParts] = args;
+        if (!contentId || !title) {
+          return reply('Usage: `!mint-xael <content_id> <title> [description]`\n\nThis mints your dream as an XAEL NFT on Base chain. You need a linked wallet and the bot must be configured with a contract address.', true);
+        }
+
+        // Check if content already minted
+        const existingMinted = db.prepare('SELECT * FROM minted_xaels WHERE content_id = ?').get(contentId);
+        if (existingMinted) return reply('This content ID has already been minted as an XAEL.', true);
+
+        // Check contracts are configured
+        if (!process.env.XAELS_CONTRACT_ADDRESS) {
+          return reply('XAELs contract not yet deployed. Coming soon!', true);
+        }
+
+        await defer();
+
+        try {
+          // Upload metadata to IPFS
+          const { uploadMetadataToIPFS } = await import('./ipfs/index.js');
+          const pinataJWT = process.env.PINATA_JWT;
+          if (!pinataJWT) throw new Error('PINATA_JWT not configured');
+
+          const metadataResult = await uploadMetadataToIPFS({
+            name: title,
+            description: descParts.join(' ') || `Dream: ${title}`,
+            category: 'dream',
+            emotion: 'neutral',
+            themes: [contentId],
+            externalUrl: `https://everdream.app/dream/${contentId}`,
+          }, pinataJWT);
+
+          // Mint on-chain
+          const { mintXAEL } = await import('./contracts/index.js');
+          const result = await mintXAEL(
+            wallet.eth_address,
+            metadataResult.metadataURI,
+            'dream',
+            'neutral',
+            true,
+            500 // 5% royalty
+          );
+
+          // Record in DB
+          db.prepare('INSERT INTO minted_xaels (content_id, token_id, tx_hash, minter_discord_id, metadata_uri) VALUES (?, ?, ?, ?, ?)')
+            .run(contentId, result.tokenId, result.hash, user.id, metadataResult.metadataURI);
+
+          // Award TAOs for minting
+          if (process.env.TAOS_CONTRACT_ADDRESS) {
+            try {
+              const { mintTAOForAction } = await import('./contracts/index.js');
+              await mintTAOForAction(wallet.eth_address, 'UPLOAD');
+            } catch (taoErr) {
+              console.log('TAO mint failed (non-critical):', taoErr.message);
+            }
+          }
+
+          const embed = new EmbedBuilder()
+            .setColor(0x8b5cf6)
+            .setTitle('🌙 XAEL Minted!')
+            .setDescription(
+              `**${title}** has been minted as an XAEL NFT!\n\n` +
+              `**Token ID:** ${result.tokenId}\n` +
+              `**TX:** \`${result.hash.slice(0, 10)}...${result.hash.slice(-8)}\`\n` +
+              `**Metadata:** ${metadataResult.metadataURI}\n\n` +
+              `View on Basescan: https://basescan.org/tx/${result.hash}`
+            );
+          await ctx.editReply?.({ embeds: [embed] }) || replyEmbed(embed);
+          log(`${user.tag} minted XAEL #${result.tokenId} (${contentId}): ${result.hash}`, 'success');
+        } catch (mintErr) {
+          console.error('Mint error:', mintErr);
+          log(`Mint error for ${user.tag}: ${mintErr.message}`, 'error');
+          await ctx.editReply?.({ content: `Mint failed: ${mintErr.message}` }) || reply(`Mint failed: ${mintErr.message}`, true);
+        }
+        break;
+      }
+
+      case 'my-nfts': {
+        const wallet = db.prepare('SELECT * FROM wallets WHERE discord_id = ?').get(user.id);
+        if (!wallet) return reply('You need to link a wallet first! Use `!link <ethereum_address>`', true);
+
+        // Get on-chain balance if contract is configured
+        let onChainCount = 0;
+        let onChainTokens = [];
+        if (process.env.XAELS_CONTRACT_ADDRESS) {
+          try {
+            const { getXAELBalance, getXAELsOfOwner } = await import('./contracts/index.js');
+            onChainCount = await getXAELBalance(wallet.eth_address);
+            onChainTokens = await getXAELsOfOwner(wallet.eth_address);
+          } catch {}
+        }
+
+        // Get locally minted
+        const minted = db.prepare('SELECT * FROM minted_xaels WHERE minter_discord_id = ? ORDER BY created_at DESC LIMIT 10').all(user.id);
+
+        const embed = new EmbedBuilder()
+          .setColor(0x8b5cf6)
+          .setTitle('🌙 Your XAELs')
+          .setDescription(
+            `**Wallet:** \`${wallet.eth_address.slice(0, 6)}...${wallet.eth_address.slice(-4)}\`\n` +
+            `**On-chain balance:** ${onChainCount} XAELs\n\n` +
+            (minted.length > 0
+              ? minted.map(m => `**#${m.token_id}** — \`${m.content_id}\` — ${m.metadata_uri}`).join('\n')
+              : 'No XAELs minted yet. Use `!mint-xael <id> <title>` to mint your first!')
+          );
+        replyEmbed(embed);
+        break;
+      }
+
+      case 'my-taos': {
+        const wallet = db.prepare('SELECT * FROM wallets WHERE discord_id = ?').get(user.id);
+        if (!wallet) return reply('You need to link a wallet first! Use `!link <ethereum_address>`', true);
+
+        let balance = "0";
+        let remaining = "0";
+        if (process.env.TAOS_CONTRACT_ADDRESS) {
+          try {
+            const { getTAOBalance, getTAORemainingDaily } = await import('./contracts/index.js');
+            balance = await getTAOBalance(wallet.eth_address);
+            remaining = await getTAORemainingDaily(wallet.eth_address);
+          } catch {}
+        }
+
+        // Get local points too
+        const profile = getProfile(user.id, user.username);
+
+        const embed = new EmbedBuilder()
+          .setColor(0xf59e0b)
+          .setTitle('💰 Your TAOs')
+          .setDescription(
+            `**Wallet:** \`${wallet.eth_address.slice(0, 6)}...${wallet.eth_address.slice(-4)}\`\n` +
+            `**On-chain TAOs:** ${balance}\n` +
+            `**Daily mint remaining:** ${remaining}\n` +
+            `**Local points:** ${profile.points} (Level ${profile.level} — ${profile.title})`
+          );
+        replyEmbed(embed);
+        break;
+      }
+
+      case 'nft-stats': {
+        let totalXAELs = 0;
+        let totalTAOs = "0";
+        if (process.env.XAELS_CONTRACT_ADDRESS) {
+          try {
+            const { getTotalXAELSupply } = await import('./contracts/index.js');
+            totalXAELs = await getTotalXAELSupply();
+          } catch {}
+        }
+        if (process.env.TAOS_CONTRACT_ADDRESS) {
+          try {
+            const { getTotalTAOSupply } = await import('./contracts/index.js');
+            totalTAOs = await getTotalTAOSupply();
+          } catch {}
+        }
+        const totalMinted = db.prepare('SELECT COUNT(*) as c FROM minted_xaels').get().c;
+
+        const embed = new EmbedBuilder()
+          .setColor(0x6d8b74)
+          .setTitle('📊 Everdream NFT Stats')
+          .setDescription(
+            `**Total XAELs minted:** ${totalXAELs}\n` +
+            `**Total TAOs supply:** ${totalTAOs}\n` +
+            `**Bot-minted XAELs:** ${totalMinted}\n` +
+            `**XAELs contract:** ${process.env.XAELS_CONTRACT_ADDRESS ? `\`${process.env.XAELS_CONTRACT_ADDRESS.slice(0, 10)}...\`` : 'Not deployed'}\n` +
+            `**TAOs contract:** ${process.env.TAOS_CONTRACT_ADDRESS ? `\`${process.env.TAOS_CONTRACT_ADDRESS.slice(0, 10)}...\`` : 'Not deployed'}`
+          );
+        replyEmbed(embed);
+        break;
+      }
+
       // ── Help ───────────────────────────────────────────────────
       case 'help': {
         const embed = new EmbedBuilder()
@@ -784,7 +1084,15 @@ async function handleCommand(command, ctx, args = []) {
             '`!link <address>` — Link Ethereum wallet\n' +
             '`!verify` — Verify and get Member role\n\n' +
             '**Dream Journal:**\n' +
-            '`!dream <text>` — Log a dream entry\n\n' +
+            '`!dream <text>` — Log a dream entry\n' +
+            '`!streak` — View your dream logging streak\n' +
+            '`!prompt` — Get today\'s dream prompt\n' +
+            '`!prompt random` — Get a random dream prompt\n' +
+            '`!mood` — View your mood stats\n' +
+            '`!mood <mood>` — Tag your latest dream with a mood\n' +
+            '`!search-dreams <keyword>` — Search your dream journal\n' +
+            '`!dream-stats` — View your dream statistics\n' +
+            '`!weekly` — Weekly dream summary\n\n' +
             '**Content:**\n' +
             '`!upload <id> <title> [desc]` — Register content\n' +
             '`!rate <content_id> <1-5>` — Rate content\n' +
@@ -800,6 +1108,11 @@ async function handleCommand(command, ctx, args = []) {
             '`!gate-add <role_id> <contract> [chain] [min] [desc]`\n' +
             '`!gate-remove <role_id>`\n' +
             '`!check-gates`\n\n' +
+            '**NFTs & Tokens:**\n' +
+            '`!mint-xael <id> <title> [desc]` — Mint a dream as XAEL NFT\n' +
+            '`!my-nfts` — View your XAEL NFTs\n' +
+            '`!my-taos` — View your TAO balance\n' +
+            '`!nft-stats` — Global NFT stats\n\n' +
             '**Moderation:**\n' +
             '`!warn @user [reason]` — Warn a user\n' +
             '`!mute @user [seconds] [reason]` — Mute/timeout\n' +
